@@ -12,41 +12,68 @@ def client():
     return TestClient(app)
 
 
+# ============================================================
+# FORECAST ENDPOINT TESTS
+# ============================================================
+
 class TestForecastEndpoint:
     """Test GET /locations/{id}/forecast endpoint."""
 
     def test_forecast_returns_200(self, client):
         """Test forecast endpoint returns 200."""
-        response = client.get("/api/locations/kolkata_001/forecast")
+        response = client.get(
+            "/api/locations/kolkata_001/forecast"
+        )
 
         assert response.status_code == 200
 
     def test_forecast_response_structure(self, client):
         """Test forecast response structure."""
-        response = client.get("/api/locations/kolkata_001/forecast")
+        response = client.get(
+            "/api/locations/kolkata_001/forecast"
+        )
+
+        assert response.status_code == 200
+
         data = response.json()
 
         assert "location_id" in data
         assert "generated_at" in data
         assert "forecasts" in data
+
         assert isinstance(data["forecasts"], list)
 
     def test_forecast_default_horizons(self, client):
-        """Test default horizons (1h, 3h, 6h)."""
-        response = client.get("/api/locations/kolkata_001/forecast")
+        """Test default forecast horizons: 1h, 3h, and 6h."""
+        response = client.get(
+            "/api/locations/kolkata_001/forecast"
+        )
+
+        assert response.status_code == 200
+
         data = response.json()
 
-        horizons = [f["horizon_minutes"] for f in data["forecasts"]]
-        assert 60 in horizons  # 1h
-        assert 180 in horizons  # 3h
-        assert 360 in horizons  # 6h
+        horizons = [
+            forecast["horizon_minutes"]
+            for forecast in data["forecasts"]
+        ]
+
+        assert 60 in horizons
+        assert 180 in horizons
+        assert 360 in horizons
 
     def test_forecast_point_has_required_fields(self, client):
         """Test each forecast point has required fields."""
-        response = client.get("/api/locations/kolkata_001/forecast")
+        response = client.get(
+            "/api/locations/kolkata_001/forecast"
+        )
+
+        assert response.status_code == 200
+
         data = response.json()
 
-        forecast = data["forecasts"][0]
+        assert len(data["forecasts"]) > 0
+
         required_fields = [
             "horizon_minutes",
             "target_time",
@@ -56,47 +83,87 @@ class TestForecastEndpoint:
             "confidence",
         ]
 
-        for field in required_fields:
-            assert field in forecast
+        for forecast in data["forecasts"]:
+            for field in required_fields:
+                assert field in forecast
 
     def test_forecast_confidence_range(self, client):
         """Test confidence is between 0 and 1."""
-        response = client.get("/api/locations/kolkata_001/forecast")
+        response = client.get(
+            "/api/locations/kolkata_001/forecast"
+        )
+
+        assert response.status_code == 200
+
         data = response.json()
 
         for forecast in data["forecasts"]:
             assert 0.0 <= forecast["confidence"] <= 1.0
 
     def test_forecast_target_time_correct(self, client):
-        """Test target_time is reference_time + horizon."""
-        response = client.get("/api/locations/kolkata_001/forecast")
+        """Test target_time is generated_at + horizon."""
+        response = client.get(
+            "/api/locations/kolkata_001/forecast"
+        )
+
+        assert response.status_code == 200
+
         data = response.json()
 
-        generated = datetime.fromisoformat(data["generated_at"])
+        generated = datetime.fromisoformat(
+            data["generated_at"]
+        )
 
         for forecast in data["forecasts"]:
-            target = datetime.fromisoformat(forecast["target_time"])
-            horizon_delta = timedelta(minutes=forecast["horizon_minutes"])
+            target = datetime.fromisoformat(
+                forecast["target_time"]
+            )
+
+            horizon_delta = timedelta(
+                minutes=forecast["horizon_minutes"]
+            )
+
             expected_target = generated + horizon_delta
 
-            # Allow 1 minute tolerance
-            diff = abs((target - expected_target).total_seconds())
-            assert diff < 60
+            difference = abs(
+                (target - expected_target).total_seconds()
+            )
+
+            # Allow 1-minute tolerance
+            assert difference < 60
 
     def test_forecast_invalid_location_returns_404(self, client):
         """Test invalid location returns 404."""
-        response = client.get("/api/locations/invalid_location/forecast")
+        response = client.get(
+            "/api/locations/invalid_location/forecast"
+        )
 
         assert response.status_code == 404
 
 
+# ============================================================
+# EVENTS ENDPOINT TESTS
+# ============================================================
+
 class TestEventsEndpoint:
     """Test GET /locations/{id}/events endpoint."""
 
-    def test_events_returns_200(self, client):
+    @pytest.fixture
+    def date_range(self):
+        """Provide a valid date range."""
+        start = datetime(
+            2026, 8, 14, tzinfo=timezone.utc
+        )
+
+        end = datetime(
+            2026, 8, 15, tzinfo=timezone.utc
+        )
+
+        return start, end
+
+    def test_events_returns_200(self, client, date_range):
         """Test events endpoint returns 200."""
-        start = datetime(2026, 8, 14, tzinfo=timezone.utc)
-        end = datetime(2026, 8, 15, tzinfo=timezone.utc)
+        start, end = date_range
 
         response = client.get(
             "/api/locations/kolkata_001/events",
@@ -108,10 +175,9 @@ class TestEventsEndpoint:
 
         assert response.status_code == 200
 
-    def test_events_response_structure(self, client):
+    def test_events_response_structure(self, client, date_range):
         """Test events response structure."""
-        start = datetime(2026, 8, 14, tzinfo=timezone.utc)
-        end = datetime(2026, 8, 15, tzinfo=timezone.utc)
+        start, end = date_range
 
         response = client.get(
             "/api/locations/kolkata_001/events",
@@ -121,15 +187,18 @@ class TestEventsEndpoint:
             },
         )
 
+        assert response.status_code == 200
+
         data = response.json()
+
         assert "location_id" in data
         assert "events" in data
+
         assert isinstance(data["events"], list)
 
-    def test_event_has_required_fields(self, client):
+    def test_event_has_required_fields(self, client, date_range):
         """Test each event has required fields."""
-        start = datetime(2026, 8, 14, tzinfo=timezone.utc)
-        end = datetime(2026, 8, 15, tzinfo=timezone.utc)
+        start, end = date_range
 
         response = client.get(
             "/api/locations/kolkata_001/events",
@@ -139,28 +208,29 @@ class TestEventsEndpoint:
             },
         )
 
-        data = response.json()
-        if data["events"]:
-            event = data["events"][0]
-            required_fields = [
-                "event_id",
-                "pollutant",
-                "start_time",
-                "end_time",
-                "duration_hours",
-                "peak_value",
-                "mean_value",
-                "peak_anomaly_score",
-                "severity",
-            ]
+        assert response.status_code == 200
 
+        data = response.json()
+
+        required_fields = [
+            "event_id",
+            "pollutant",
+            "start_time",
+            "end_time",
+            "duration_hours",
+            "peak_value",
+            "mean_value",
+            "peak_anomaly_score",
+            "severity",
+        ]
+
+        for event in data["events"]:
             for field in required_fields:
                 assert field in event
 
-    def test_event_includes_weather(self, client):
+    def test_event_includes_weather(self, client, date_range):
         """Test event includes weather context."""
-        start = datetime(2026, 8, 14, tzinfo=timezone.utc)
-        end = datetime(2026, 8, 15, tzinfo=timezone.utc)
+        start, end = date_range
 
         response = client.get(
             "/api/locations/kolkata_001/events",
@@ -170,19 +240,27 @@ class TestEventsEndpoint:
             },
         )
 
+        assert response.status_code == 200
+
         data = response.json()
-        if data["events"]:
-            event = data["events"][0]
-            if event.get("weather"):
-                weather = event["weather"]
+
+        for event in data["events"]:
+            weather = event.get("weather")
+
+            if weather is not None:
                 assert "mean_temperature_c" in weather
                 assert "mean_humidity_pct" in weather
                 assert "mean_wind_speed_kmh" in weather
 
     def test_events_invalid_date_range_returns_400(self, client):
         """Test invalid date range returns 400."""
-        start = datetime(2026, 8, 15, tzinfo=timezone.utc)
-        end = datetime(2026, 8, 14, tzinfo=timezone.utc)
+        start = datetime(
+            2026, 8, 15, tzinfo=timezone.utc
+        )
+
+        end = datetime(
+            2026, 8, 14, tzinfo=timezone.utc
+        )
 
         response = client.get(
             "/api/locations/kolkata_001/events",
@@ -196,8 +274,13 @@ class TestEventsEndpoint:
 
     def test_events_invalid_location_returns_404(self, client):
         """Test invalid location returns 404."""
-        start = datetime(2026, 8, 14, tzinfo=timezone.utc)
-        end = datetime(2026, 8, 15, tzinfo=timezone.utc)
+        start = datetime(
+            2026, 8, 14, tzinfo=timezone.utc
+        )
+
+        end = datetime(
+            2026, 8, 15, tzinfo=timezone.utc
+        )
 
         response = client.get(
             "/api/locations/invalid_location/events",
@@ -210,10 +293,14 @@ class TestEventsEndpoint:
         assert response.status_code == 404
 
     def test_events_filtered_by_date(self, client):
-        """Test events filtered by date range."""
-        # Date before any events
-        start = datetime(2026, 8, 1, tzinfo=timezone.utc)
-        end = datetime(2026, 8, 13, tzinfo=timezone.utc)
+        """Test events are filtered by date range."""
+        start = datetime(
+            2026, 8, 1, tzinfo=timezone.utc
+        )
+
+        end = datetime(
+            2026, 8, 13, tzinfo=timezone.utc
+        )
 
         response = client.get(
             "/api/locations/kolkata_001/events",
@@ -223,23 +310,36 @@ class TestEventsEndpoint:
             },
         )
 
+        assert response.status_code == 200
+
         data = response.json()
-        # May return 0 events if date doesn't overlap
+
         assert isinstance(data["events"], list)
 
+
+# ============================================================
+# BASELINE ENDPOINT TESTS
+# ============================================================
 
 class TestBaselineEndpoint:
     """Test GET /locations/{id}/baseline endpoint."""
 
     def test_baseline_returns_200(self, client):
         """Test baseline endpoint returns 200."""
-        response = client.get("/api/locations/kolkata_001/baseline")
+        response = client.get(
+            "/api/locations/kolkata_001/baseline"
+        )
 
         assert response.status_code == 200
 
     def test_baseline_response_structure(self, client):
         """Test baseline response structure."""
-        response = client.get("/api/locations/kolkata_001/baseline")
+        response = client.get(
+            "/api/locations/kolkata_001/baseline"
+        )
+
+        assert response.status_code == 200
+
         data = response.json()
 
         required_fields = [
@@ -262,12 +362,16 @@ class TestBaselineEndpoint:
 
     def test_baseline_default_hour_and_month(self, client):
         """Test baseline uses current hour and month by default."""
-        from datetime import datetime, timezone
+        response = client.get(
+            "/api/locations/kolkata_001/baseline"
+        )
 
-        response = client.get("/api/locations/kolkata_001/baseline")
+        assert response.status_code == 200
+
         data = response.json()
 
         now = datetime.now(timezone.utc)
+
         assert data["hour_of_day"] == now.hour
         assert data["month"] == now.month
 
@@ -278,26 +382,44 @@ class TestBaselineEndpoint:
             params={"hour": 15},
         )
 
+        assert response.status_code == 200
+
         data = response.json()
+
         assert data["hour_of_day"] == 15
 
     def test_baseline_hour_zero_is_midnight(self, client, monkeypatch):
-        """hour=0 asks for midnight; it must not fall back to the current hour."""
+        """Test hour=0 correctly represents midnight."""
         import aq_engine.api.observations as observations
 
         class FixedDatetime(datetime):
             @classmethod
             def now(cls, tz=None):
-                return datetime(2026, 8, 15, 15, 0, tzinfo=timezone.utc)
+                return datetime(
+                    2026,
+                    8,
+                    15,
+                    15,
+                    0,
+                    tzinfo=timezone.utc,
+                )
 
-        monkeypatch.setattr(observations, "datetime", FixedDatetime)
+        monkeypatch.setattr(
+            observations,
+            "datetime",
+            FixedDatetime,
+        )
+
         response = client.get(
             "/api/locations/kolkata_001/baseline",
             params={"hour": 0},
         )
 
         assert response.status_code == 200
-        assert response.json()["hour_of_day"] == 0
+
+        data = response.json()
+
+        assert data["hour_of_day"] == 0
 
     def test_baseline_custom_month(self, client):
         """Test baseline with custom month."""
@@ -306,12 +428,20 @@ class TestBaselineEndpoint:
             params={"month": 6},
         )
 
+        assert response.status_code == 200
+
         data = response.json()
+
         assert data["month"] == 6
 
     def test_baseline_percentiles_ordered(self, client):
-        """Test percentiles are ordered p50 < p75 < p90 < p95 < p99."""
-        response = client.get("/api/locations/kolkata_001/baseline")
+        """Test percentiles are ordered."""
+        response = client.get(
+            "/api/locations/kolkata_001/baseline"
+        )
+
+        assert response.status_code == 200
+
         data = response.json()
 
         assert data["p50"] <= data["p75"]
@@ -321,7 +451,9 @@ class TestBaselineEndpoint:
 
     def test_baseline_invalid_location_returns_404(self, client):
         """Test invalid location returns 404."""
-        response = client.get("/api/locations/invalid_location/baseline")
+        response = client.get(
+            "/api/locations/invalid_location/baseline"
+        )
 
         assert response.status_code == 404
 
@@ -344,25 +476,45 @@ class TestBaselineEndpoint:
         assert response.status_code == 422
 
 
+# ============================================================
+# TIMESTAMP TESTS
+# ============================================================
+
 class TestTimestamps:
     """Test ISO 8601 timestamp formatting."""
 
     def test_forecast_times_are_iso(self, client):
-        """Test forecast times are ISO 8601."""
-        response = client.get("/api/locations/kolkata_001/forecast")
+        """Test forecast timestamps are ISO 8601."""
+        response = client.get(
+            "/api/locations/kolkata_001/forecast"
+        )
+
+        assert response.status_code == 200
+
         data = response.json()
 
-        generated = datetime.fromisoformat(data["generated_at"])
+        generated = datetime.fromisoformat(
+            data["generated_at"]
+        )
+
         assert generated.tzinfo is not None
 
         for forecast in data["forecasts"]:
-            target = datetime.fromisoformat(forecast["target_time"])
+            target = datetime.fromisoformat(
+                forecast["target_time"]
+            )
+
             assert target.tzinfo is not None
 
     def test_event_times_are_iso(self, client):
-        """Test event times are ISO 8601."""
-        start = datetime(2026, 8, 14, tzinfo=timezone.utc)
-        end = datetime(2026, 8, 15, tzinfo=timezone.utc)
+        """Test event timestamps are ISO 8601."""
+        start = datetime(
+            2026, 8, 14, tzinfo=timezone.utc
+        )
+
+        end = datetime(
+            2026, 8, 15, tzinfo=timezone.utc
+        )
 
         response = client.get(
             "/api/locations/kolkata_001/events",
@@ -372,13 +524,26 @@ class TestTimestamps:
             },
         )
 
-        data = response.json()
-        for event in data["events"]:
-            start_time = datetime.fromisoformat(event["start_time"])
-            end_time = datetime.fromisoformat(event["end_time"])
-            assert start_time.tzinfo is not None
-            assert end_time.tzinfo is not None
+        assert response.status_code == 200
 
+        data = response.json()
+
+        for event in data["events"]:
+            event_start = datetime.fromisoformat(
+                event["start_time"]
+            )
+
+            event_end = datetime.fromisoformat(
+                event["end_time"]
+            )
+
+            assert event_start.tzinfo is not None
+            assert event_end.tzinfo is not None
+
+
+# ============================================================
+# RUN TESTS
+# ============================================================
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
